@@ -81,12 +81,32 @@ pipeline {
                       }
                     }
                 }
+		sh '''
+			oc project  ${DEV_PROJECT}
+			oc new-app -i ${APP_NAME}:latest --name ${APP_NAME}
+			oc expose svc ${APP_NAME}
+		   '''
                 // TODO: Create a new OpenShift application based on the ${APP_NAME}:latest image stream
                 // TODO: Expose the ${APP_NAME} service for external access
             }
         }
 
         stage('Wait for deployment in DEV env') {
+	    sh "oc get route ${APP_NAME} -n ${DEV_PROJECT} -o jsonpath='{ .spec.host }' --loglevel=4 > routehost"
+
+                script {
+                    routeHost = readFile('routehost').trim()
+
+                    openshift.withCluster() {
+                        openshift.withProject( "${DEV_PROJECT}" ) {
+                            def deployment = openshift.selector("dc", "${APP_NAME}").rollout()
+                            openshift.selector("dc", "${APP_NAME}").related('pods').untilEach(1) {
+                                return (it.object().status.phase == "Running")
+                            }
+                        }
+                        echo "Deployment to DEV env is complete. Access the API endpoint at the URL http://${routeHost}/movies."
+                    }
+                }
             //TODO: Watch deployment until pod is in 'Running' state
         }
 
@@ -97,6 +117,7 @@ pipeline {
                 }
                 script {
                     openshift.withCluster() {
+			openshift.tag()
                     // TODO: Tag the ${APP_NAME}:latest image stream in the dev env as ${APP_NAME}:stage in staging
                     }
                 }
@@ -113,6 +134,11 @@ pipeline {
                    '''
 
                 echo '### Creating a new app in Staging ###'
+		sh '''
+                        oc project  ${STAGE_PROJECT}
+                        oc new-app -i ${APP_NAME}:latest --name ${APP_NAME}
+                        oc expose svc ${APP_NAME}
+                   '''
                 // TODO: Create a new app in staging and expose the service
             }
         }
@@ -135,6 +161,6 @@ pipeline {
                     }
                 }
             }
-        }
+	}
     }
 }
