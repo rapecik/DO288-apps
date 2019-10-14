@@ -290,7 +290,7 @@ objects:
       app: backend
     name: backend
   spec:
-    host: ${HOSTNAME}
+    host: ${BACKEND}
     port:
       targetPort: 8080-tcp
     to:
